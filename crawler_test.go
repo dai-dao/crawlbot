@@ -1,6 +1,9 @@
-package main
+package crawler
 
 import (
+	"fmt"
+	"log"
+	"net/http"
 	"testing"
 )
 
@@ -16,11 +19,16 @@ func TestFetch(t *testing.T) {
 		crawler.Done()
 
 		// assert
+		want := []string{"http://golang.org", "http://google.com"}
 		if len(crawler.urlsCrawled) != 2 {
-			t.Errorf("num url crawled is wrong, got %d but want %d", len(crawler.urlsCrawled), 2)
+			t.Fatalf("Wanted %v, got %v", want, crawler.urlsCrawled)
 		}
 	})
 }
 
-func handler() {
-}
+var handler = HandlerFunc(func(r Request, res *http.Response, err error) {
+	if err != nil {
+		log.Fatalf("Error doing request with url %s, %s", r.URL.String(), err)
+	}
+	fmt.Printf("[%d] %s %s\n", res.StatusCode, r.method, r.URL.String())
+})
