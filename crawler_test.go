@@ -15,6 +15,9 @@ func TestFetch(t *testing.T) {
 		// new links will be added continuously, and asynchronously
 		crawler.Crawl("HEAD", "http://golang.org", "http://google.com")
 
+		// wait for crawl
+		// time.Sleep(200 * time.Millisecond)
+
 		// done
 		crawler.Done()
 
@@ -23,6 +26,14 @@ func TestFetch(t *testing.T) {
 		if len(crawler.urlsCrawled) != 2 {
 			t.Fatalf("Wanted %v, got %v", want, crawler.urlsCrawled)
 		}
+	})
+
+	t.Run("test when crawler is done, can not crawl anymore and return error", func(t *testing.T) {
+
+	})
+
+	t.Run("test crawler can be stopped at any time without waiting to finish", func(t *testing.T) {
+
 	})
 }
 
