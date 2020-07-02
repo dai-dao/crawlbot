@@ -24,6 +24,8 @@ type CrawlBot struct {
 	doneTimer *time.Timer
 	// time in milliseconds, idle duration until close
 	doneTime int
+	// take stop signal from main program and stop crawler arbitrarily
+	stopSig chan struct{}
 }
 
 // NewCrawlBot returns an initialized CrawBot and starts the process goroutine
@@ -35,6 +37,7 @@ func NewCrawlBot(h Handler) *CrawlBot {
 		out:         make(chan Request, 1),
 		client:      http.DefaultClient,
 		doneTime:    50,
+		stopSig:     make(chan struct{}),
 	}
 
 	// start the done timer, arbitrary time for first timer
@@ -100,12 +103,26 @@ processLoop:
 			}(r)
 		case <-c.doneTimer.C:
 			// channel idle for enough time, stop crawler
-			close(c.in)
-			close(c.out)
-			c.wg.Done()
+			c.stop()
+			break processLoop
+		case <-c.stopSig:
+			// got stop signal, no need to wait for timer
+			c.stop()
 			break processLoop
 		}
 	}
+}
+
+// Stop to stop the crawler arbitrarily
+func (c *CrawlBot) Stop() {
+	c.stopSig <- struct{}{}
+}
+
+// stop crawling, close the in channel and release sync to return execution
+// to main, any other running goroutines would be canceled
+func (c *CrawlBot) stop() {
+	close(c.in)
+	c.wg.Done()
 }
 
 // run continuous stop to make sure the timer is stopped and resetted
