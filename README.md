@@ -2,7 +2,8 @@
 - Concurrent fetching
 - Follow TDD methodology
 
+=> Inspiration from a similar project https://github.com/PuerkitoBio/fetchbot
+
 
 ### TODO
-- pass in flag timer value for second timer call
 - Copy tests from fetchbot, re-write a few so i know what it's doing 

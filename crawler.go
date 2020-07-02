@@ -1,12 +1,16 @@
 package crawler
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
 )
+
+// ErrStopped is returned when a Crawl call is made when crawler is already stopped
+var ErrStopped = errors.New("crawler is already stopped")
 
 // CrawlBot defines the control for running the crawling
 type CrawlBot struct {
@@ -16,7 +20,12 @@ type CrawlBot struct {
 	out         chan Request
 	wg          sync.WaitGroup
 	client      *http.Client
-	doneTimer   *time.Timer // stop crawling when in channel is idle for a specified time
+	// stop crawling when in channel is idle for a specified time
+	doneTimer *time.Timer
+	// time in milliseconds, idle duration until close
+	doneTime int
+	// take stop signal from main program and stop crawler arbitrarily
+	stopSig chan struct{}
 }
 
 // NewCrawlBot returns an initialized CrawBot and starts the process goroutine
@@ -27,6 +36,8 @@ func NewCrawlBot(h Handler) *CrawlBot {
 		in:          make(chan Request, 1),
 		out:         make(chan Request, 1),
 		client:      http.DefaultClient,
+		doneTime:    50,
+		stopSig:     make(chan struct{}),
 	}
 
 	// start the done timer, arbitrary time for first timer
@@ -41,7 +52,11 @@ func NewCrawlBot(h Handler) *CrawlBot {
 }
 
 // Crawl accepts new requests and process them
-func (c *CrawlBot) Crawl(method string, urls ...string) {
+// new requests will be added continuously, and asynchronously
+func (c *CrawlBot) Crawl(method string, urls ...string) (out error) {
+	out = nil
+	defer c.handleErrStopped(&out)
+
 	// for every new request, send to the in channel
 	for _, u := range urls {
 		parsedURL, err := url.Parse(u)
@@ -49,15 +64,23 @@ func (c *CrawlBot) Crawl(method string, urls ...string) {
 			log.Fatalf("URL %s can not be parsed, moving on", u)
 			continue
 		}
+
 		c.in <- Request{parsedURL, method}
+	}
+
+	return nil
+}
+
+// Modify value of resulting error signal based on panic
+func (c *CrawlBot) handleErrStopped(out *error) {
+	if err := recover(); err != nil {
+		log.Printf("panic occurred : %v\n", err)
+		*out = ErrStopped
 	}
 }
 
 // Done : Close request channel and wait for goroutine to finish
 func (c *CrawlBot) Done() {
-	//
-	// close(c.in)
-	// close(c.out)
 	c.wg.Wait()
 }
 
@@ -76,16 +99,30 @@ processLoop:
 				c.handler.Handle(res.Request(), res.Response(), res.Error())
 				c.out <- re
 				// Request finished, reset timer
-				c.doneTimer.Reset(10 * time.Millisecond)
+				c.doneTimer.Reset(time.Duration(c.doneTime) * time.Millisecond)
 			}(r)
 		case <-c.doneTimer.C:
 			// channel idle for enough time, stop crawler
-			close(c.in)
-			close(c.out)
-			c.wg.Done()
+			c.stop()
+			break processLoop
+		case <-c.stopSig:
+			// got stop signal, no need to wait for timer
+			c.stop()
 			break processLoop
 		}
 	}
+}
+
+// Stop to stop the crawler arbitrarily
+func (c *CrawlBot) Stop() {
+	c.stopSig <- struct{}{}
+}
+
+// stop crawling, close the in channel and release sync to return execution
+// to main, any other running goroutines would be canceled
+func (c *CrawlBot) stop() {
+	close(c.in)
+	c.wg.Done()
 }
 
 // run continuous stop to make sure the timer is stopped and resetted
