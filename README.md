@@ -4,5 +4,6 @@
 
 
 ### TODO
-- how to check if out channel is still waiting for a I/O process to complete?
+- check processRequest all finish BEFORE resetting timer
+- pass in flag timer value for second timer call
 - Copy tests from fetchbot, re-write a few so i know what it's doing 
