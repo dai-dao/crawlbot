@@ -68,14 +68,15 @@ processLoop:
 	for {
 		select {
 		case r := <-c.in:
+			// New request, stop timer
+			go c.stopTimer()
 			//
 			go func(re Request) {
 				res := c.doRequest(re)
 				c.handler.Handle(res.Request(), res.Response(), res.Error())
 				c.out <- re
 				// Request finished, reset timer
-				c.doneTimer.Stop()
-				c.doneTimer.Reset(150 * time.Millisecond)
+				c.doneTimer.Reset(10 * time.Millisecond)
 			}(r)
 		case <-c.doneTimer.C:
 			// channel idle for enough time, stop crawler
@@ -83,6 +84,16 @@ processLoop:
 			close(c.out)
 			c.wg.Done()
 			break processLoop
+		}
+	}
+}
+
+// run continuous stop to make sure the timer is stopped and resetted
+// on the last request
+func (c *CrawlBot) stopTimer() {
+	for {
+		if c.doneTimer.Stop() {
+			break
 		}
 	}
 }
